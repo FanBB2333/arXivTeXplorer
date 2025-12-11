@@ -1,9 +1,11 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { unzipSync, strFromU8, gunzipSync } from 'fflate'
-import Prism from 'prismjs'
-import 'prismjs/components/prism-latex'
-import 'prismjs/themes/prism-tomorrow.css'
+import Editor, { loader } from '@monaco-editor/react'
+import * as monaco from 'monaco-editor'
 import './Viewer.css'
+
+// Configure Monaco to use local bundled version
+loader.config({ monaco })
 
 interface FileEntry {
   name: string
@@ -64,9 +66,29 @@ function getLanguage(filename: string): string {
     case 'cls':
     case 'ltx':
     case 'dtx':
+      return 'latex'
     case 'bib':
     case 'bst':
-      return 'latex'
+      return 'bibtex'
+    case 'json':
+      return 'json'
+    case 'xml':
+      return 'xml'
+    case 'py':
+      return 'python'
+    case 'js':
+      return 'javascript'
+    case 'ts':
+      return 'typescript'
+    case 'css':
+      return 'css'
+    case 'html':
+      return 'html'
+    case 'md':
+      return 'markdown'
+    case 'yaml':
+    case 'yml':
+      return 'yaml'
     default:
       return 'plaintext'
   }
@@ -322,56 +344,6 @@ function formatBytes(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
 }
 
-function CodeViewer({ content, language, searchQuery, onLineClick }: {
-  content: string
-  language: string
-  searchQuery: string
-  onLineClick?: (line: number) => void
-}) {
-  const highlightedLines = useMemo(() => {
-    const lines = content.split('\n')
-    const grammar = Prism.languages[language] || Prism.languages.plaintext
-
-    return lines.map((line, index) => {
-      let html = ''
-      try {
-        html = grammar ? Prism.highlight(line, grammar, language) : line
-      } catch {
-        html = line
-      }
-
-      // Highlight search matches
-      if (searchQuery && line.toLowerCase().includes(searchQuery.toLowerCase())) {
-        const regex = new RegExp(`(${searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
-        html = html.replace(regex, '<mark class="search-highlight">$1</mark>')
-      }
-
-      return { html, lineNumber: index + 1, hasMatch: searchQuery ? line.toLowerCase().includes(searchQuery.toLowerCase()) : false }
-    })
-  }, [content, language, searchQuery])
-
-  return (
-    <div className="code-viewer">
-      <table className="code-table">
-        <tbody>
-          {highlightedLines.map(({ html, lineNumber, hasMatch }) => (
-            <tr
-              key={lineNumber}
-              className={`code-line ${hasMatch ? 'has-match' : ''}`}
-              onClick={() => onLineClick?.(lineNumber)}
-            >
-              <td className="line-number">{lineNumber}</td>
-              <td className="line-content">
-                <code dangerouslySetInnerHTML={{ __html: html || ' ' }} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
 function ImageViewer({ file }: { file: FileEntry }) {
   const [imageUrl, setImageUrl] = useState<string | null>(null)
 
@@ -492,7 +464,7 @@ function SearchPanel({ files, onResultClick, onClose }: {
       }
     }
 
-    setResults(searchResults.slice(0, 100)) // Limit results
+    setResults(searchResults.slice(0, 100))
   }, [query, files])
 
   return (
@@ -562,7 +534,8 @@ export default function Viewer() {
     percent: 0
   })
   const [showSearch, setShowSearch] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
+  const [goToLine, setGoToLine] = useState<number | null>(null)
+  const editorRef = useRef<any>(null)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -609,6 +582,15 @@ export default function Viewer() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
+  // Jump to line when goToLine changes
+  useEffect(() => {
+    if (goToLine && editorRef.current) {
+      editorRef.current.revealLineInCenter(goToLine)
+      editorRef.current.setPosition({ lineNumber: goToLine, column: 1 })
+      setGoToLine(null)
+    }
+  }, [goToLine, selectedFile])
+
   const handleFileClick = useCallback((file: FileEntry) => {
     setSelectedFile(file)
     if (!openTabs.find(t => t.name === file.name)) {
@@ -629,13 +611,12 @@ export default function Viewer() {
 
   const handleSearchResultClick = useCallback((file: FileEntry, line: number) => {
     handleFileClick(file)
-    setSearchQuery(searchQuery)
-    // Scroll to line after render
-    setTimeout(() => {
-      const lineElement = document.querySelector(`.code-line:nth-child(${line})`)
-      lineElement?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    }, 100)
-  }, [handleFileClick, searchQuery])
+    setGoToLine(line)
+  }, [handleFileClick])
+
+  const handleEditorMount = (editor: any) => {
+    editorRef.current = editor
+  }
 
   if (loading) {
     return (
@@ -713,10 +694,27 @@ export default function Viewer() {
     }
 
     return (
-      <CodeViewer
-        content={selectedFile.content}
+      <Editor
+        height="100%"
         language={getLanguage(selectedFile.name)}
-        searchQuery={searchQuery}
+        value={selectedFile.content}
+        theme="vs-dark"
+        onMount={handleEditorMount}
+        options={{
+          readOnly: true,
+          minimap: { enabled: true },
+          fontSize: 14,
+          lineNumbers: 'on',
+          scrollBeyondLastLine: false,
+          wordWrap: 'off',
+          automaticLayout: true,
+          folding: true,
+          renderLineHighlight: 'all',
+          scrollbar: {
+            verticalScrollbarSize: 10,
+            horizontalScrollbarSize: 10,
+          },
+        }}
       />
     )
   }

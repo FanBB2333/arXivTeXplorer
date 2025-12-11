@@ -21,5 +21,10 @@ export default defineConfig(({ mode }) => {
     },
 
     plugins: [crx({ manifest }), react()],
+
+    // Optimize Monaco Editor
+    optimizeDeps: {
+      include: ['monaco-editor'],
+    },
   }
 })
