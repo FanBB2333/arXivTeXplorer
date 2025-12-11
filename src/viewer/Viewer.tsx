@@ -7,6 +7,141 @@ import './Viewer.css'
 // Configure Monaco to use local bundled version
 loader.config({ monaco })
 
+// Register LaTeX language for syntax highlighting
+monaco.languages.register({ id: 'latex' })
+monaco.languages.setMonarchTokensProvider('latex', {
+  defaultToken: '',
+  tokenPostfix: '.tex',
+
+  brackets: [
+    { open: '{', close: '}', token: 'delimiter.curly' },
+    { open: '[', close: ']', token: 'delimiter.bracket' },
+    { open: '(', close: ')', token: 'delimiter.parenthesis' }
+  ],
+
+  tokenizer: {
+    root: [
+      // Comments
+      [/%.*$/, 'comment'],
+
+      // Math mode
+      [/\$\$/, { token: 'string.math', next: '@mathDouble' }],
+      [/\$/, { token: 'string.math', next: '@mathSingle' }],
+      [/\\\[/, { token: 'string.math', next: '@mathDisplay' }],
+      [/\\\(/, { token: 'string.math', next: '@mathInline' }],
+
+      // Commands with arguments
+      [/\\(begin|end)(\{)([a-zA-Z*]+)(\})/, ['keyword', 'delimiter.curly', 'variable.environment', 'delimiter.curly']],
+      [/\\(documentclass|usepackage|input|include|bibliography|bibliographystyle)(\[?)/, ['keyword.control', 'delimiter.bracket']],
+      [/\\(section|subsection|subsubsection|paragraph|chapter|part)(\*?)(\{)/, ['keyword.section', 'keyword.section', 'delimiter.curly']],
+      [/\\(label|ref|cite|eqref|pageref|autoref|cref)(\{)/, ['keyword.reference', 'delimiter.curly']],
+      [/\\(textbf|textit|texttt|textrm|textsf|textsc|emph|underline)(\{)/, ['keyword.style', 'delimiter.curly']],
+      [/\\(newcommand|renewcommand|providecommand|DeclareMathOperator)(\*?)(\{)/, ['keyword.definition', 'keyword.definition', 'delimiter.curly']],
+
+      // General commands
+      [/\\[a-zA-Z@]+\*?/, 'keyword'],
+
+      // Special characters
+      [/\\[\\{}$&#%_^~]/, 'string.escape'],
+
+      // Brackets
+      [/[{}]/, 'delimiter.curly'],
+      [/[\[\]]/, 'delimiter.bracket'],
+
+      // Numbers
+      [/\d+/, 'number'],
+    ],
+
+    mathDouble: [
+      [/\$\$/, { token: 'string.math', next: '@pop' }],
+      [/\\[a-zA-Z]+/, 'keyword.math'],
+      [/[^$\\]+/, 'string.math'],
+      [/./, 'string.math']
+    ],
+
+    mathSingle: [
+      [/\$/, { token: 'string.math', next: '@pop' }],
+      [/\\[a-zA-Z]+/, 'keyword.math'],
+      [/[^$\\]+/, 'string.math'],
+      [/./, 'string.math']
+    ],
+
+    mathDisplay: [
+      [/\\\]/, { token: 'string.math', next: '@pop' }],
+      [/\\[a-zA-Z]+/, 'keyword.math'],
+      [/[^\]\\]+/, 'string.math'],
+      [/./, 'string.math']
+    ],
+
+    mathInline: [
+      [/\\\)/, { token: 'string.math', next: '@pop' }],
+      [/\\[a-zA-Z]+/, 'keyword.math'],
+      [/[^)\\]+/, 'string.math'],
+      [/./, 'string.math']
+    ]
+  }
+})
+
+// Define LaTeX theme colors
+monaco.editor.defineTheme('latex-dark', {
+  base: 'vs-dark',
+  inherit: true,
+  rules: [
+    { token: 'comment', foreground: '6A9955' },
+    { token: 'keyword', foreground: '569CD6' },
+    { token: 'keyword.control', foreground: 'C586C0' },
+    { token: 'keyword.section', foreground: 'DCDCAA' },
+    { token: 'keyword.reference', foreground: '4EC9B0' },
+    { token: 'keyword.style', foreground: '9CDCFE' },
+    { token: 'keyword.definition', foreground: 'C586C0' },
+    { token: 'keyword.math', foreground: '569CD6' },
+    { token: 'string.math', foreground: 'CE9178' },
+    { token: 'string.escape', foreground: 'D7BA7D' },
+    { token: 'variable.environment', foreground: '4EC9B0' },
+    { token: 'delimiter.curly', foreground: 'FFD700' },
+    { token: 'delimiter.bracket', foreground: 'DA70D6' },
+    { token: 'number', foreground: 'B5CEA8' },
+  ],
+  colors: {}
+})
+
+// Register BibTeX language
+monaco.languages.register({ id: 'bibtex' })
+monaco.languages.setMonarchTokensProvider('bibtex', {
+  defaultToken: '',
+  tokenPostfix: '.bib',
+
+  tokenizer: {
+    root: [
+      // Comments
+      [/%.*$/, 'comment'],
+
+      // Entry types
+      [/@(article|book|inproceedings|proceedings|incollection|inbook|phdthesis|mastersthesis|techreport|manual|misc|unpublished|booklet|conference)\b/i, 'keyword.entry'],
+      [/@(string|preamble|comment)\b/i, 'keyword.special'],
+
+      // Field names
+      [/\b(author|title|journal|booktitle|year|volume|number|pages|month|note|publisher|editor|series|address|edition|howpublished|organization|school|institution|doi|url|isbn|issn|abstract|keywords)\s*=/i, 'variable.field'],
+
+      // Strings
+      [/"[^"]*"/, 'string'],
+      [/\{/, { token: 'delimiter.curly', next: '@braceString' }],
+
+      // Numbers
+      [/\d+/, 'number'],
+
+      // Citation keys
+      [/[a-zA-Z_][a-zA-Z0-9_:-]*/, 'identifier'],
+    ],
+
+    braceString: [
+      [/\{/, { token: 'delimiter.curly', next: '@braceString' }],
+      [/\}/, { token: 'delimiter.curly', next: '@pop' }],
+      [/[^{}]+/, 'string']
+    ]
+  }
+})
+
 interface FileEntry {
   name: string
   content: string
@@ -922,7 +1057,7 @@ export default function Viewer() {
         height="100%"
         language={getLanguage(selectedFile.name)}
         value={selectedFile.content}
-        theme="vs-dark"
+        theme="latex-dark"
         onMount={handleEditorMount}
         options={{
           readOnly: true,
