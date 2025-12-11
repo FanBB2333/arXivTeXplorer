@@ -1,7 +1,10 @@
-console.log('background is running')
+console.log('arXivTeXplorer background service worker running')
 
-chrome.runtime.onMessage.addListener((request) => {
-  if (request.type === 'COUNT') {
-    console.log('background has received a message from popup, and count is ', request?.count)
+// Handle extension installation
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details.reason === 'install') {
+    console.log('arXivTeXplorer installed')
+  } else if (details.reason === 'update') {
+    console.log('arXivTeXplorer updated to version', chrome.runtime.getManifest().version)
   }
 })
