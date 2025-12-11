@@ -25,14 +25,16 @@
     "zip": "npm run build && node src/zip.js"
   },
   "dependencies": {
-    "@monaco-editor/react": "^4.6.0",
     "fflate": "^0.8.2",
+    "prismjs": "^1.29.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-simple-code-editor": "^0.14.1"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0-beta.29",
     "@types/chrome": "^0.0.287",
+    "@types/prismjs": "^1.26.5",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",

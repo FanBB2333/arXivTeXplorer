@@ -1,14 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import Editor, { loader } from '@monaco-editor/react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { unzipSync, strFromU8, gunzipSync } from 'fflate'
+import Prism from 'prismjs'
+import 'prismjs/components/prism-latex'
+import 'prismjs/themes/prism-tomorrow.css'
 import './Viewer.css'
-
-// Configure Monaco loader to use CDN
-loader.config({
-  paths: {
-    vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs'
-  }
-})
 
 interface FileEntry {
   name: string
@@ -53,13 +48,11 @@ function getLanguage(filename: string): string {
     case 'tex':
     case 'sty':
     case 'cls':
-      return 'latex'
+    case 'ltx':
+    case 'dtx':
     case 'bib':
     case 'bst':
-      return 'bibtex'
-    case 'txt':
-    case 'md':
-      return 'plaintext'
+      return 'latex'
     default:
       return 'plaintext'
   }
@@ -87,7 +80,6 @@ async function fetchAndExtractTexSource(
   const contentLength = response.headers.get('content-length')
   const total = contentLength ? parseInt(contentLength, 10) : 0
 
-  // Read response with progress
   const reader = response.body?.getReader()
   if (!reader) {
     throw new Error('Failed to get response reader')
@@ -111,7 +103,6 @@ async function fetchAndExtractTexSource(
     })
   }
 
-  // Combine chunks
   const data = new Uint8Array(loaded)
   let offset = 0
   for (const chunk of chunks) {
@@ -129,18 +120,14 @@ async function fetchAndExtractTexSource(
   const contentType = response.headers.get('content-type') || ''
   const files: FileEntry[] = []
 
-  // Check if it's a gzipped file (single .tex file)
   if (data[0] === 0x1f && data[1] === 0x8b) {
     try {
-      // Try to decompress as gzip (could be single file or tar.gz)
       const decompressed = gunzipSync(data)
 
-      // Check if it's a tar archive (starts with file header)
       if (isTarArchive(decompressed)) {
         const tarFiles = extractTar(decompressed)
         files.push(...tarFiles)
       } else {
-        // Single file
         const content = strFromU8(decompressed)
         files.push({
           name: `${arxivId.replace(/\//g, '_')}.tex`,
@@ -149,7 +136,6 @@ async function fetchAndExtractTexSource(
         })
       }
     } catch {
-      // Maybe it's plain text that starts with those bytes
       const content = new TextDecoder().decode(data)
       files.push({
         name: `${arxivId.replace(/\//g, '_')}.tex`,
@@ -158,11 +144,9 @@ async function fetchAndExtractTexSource(
       })
     }
   } else if (contentType.includes('application/x-eprint-tar') || contentType.includes('application/x-tar')) {
-    // Plain tar file
     const tarFiles = extractTar(data)
     files.push(...tarFiles)
   } else if (contentType.includes('text/') || contentType.includes('application/x-tex')) {
-    // Plain text file
     const content = new TextDecoder().decode(data)
     files.push({
       name: `${arxivId.replace(/\//g, '_')}.tex`,
@@ -170,7 +154,6 @@ async function fetchAndExtractTexSource(
       isTeX: true
     })
   } else {
-    // Try to decompress as zip
     try {
       const unzipped = unzipSync(data)
       for (const [filename, fileData] of Object.entries(unzipped)) {
@@ -189,7 +172,6 @@ async function fetchAndExtractTexSource(
         }
       }
     } catch {
-      // Try as plain text
       const content = new TextDecoder().decode(data)
       files.push({
         name: `${arxivId.replace(/\//g, '_')}.tex`,
@@ -199,7 +181,6 @@ async function fetchAndExtractTexSource(
     }
   }
 
-  // Sort files: .tex files first, then alphabetically
   files.sort((a, b) => {
     if (a.isTeX && !b.isTeX) return -1
     if (!a.isTeX && b.isTeX) return 1
@@ -217,7 +198,6 @@ async function fetchAndExtractTexSource(
 }
 
 function isTarArchive(data: Uint8Array): boolean {
-  // Check for tar magic number at offset 257
   if (data.length < 263) return false
   const magic = new TextDecoder().decode(data.slice(257, 262))
   return magic === 'ustar' || magic.startsWith('ustar')
@@ -228,24 +208,18 @@ function extractTar(data: Uint8Array): FileEntry[] {
   let offset = 0
 
   while (offset < data.length - 512) {
-    // Read file name (first 100 bytes)
     const nameBytes = data.slice(offset, offset + 100)
     const name = new TextDecoder().decode(nameBytes).replace(/\0/g, '').trim()
 
     if (!name) break
 
-    // Read file size (bytes 124-135, octal)
     const sizeBytes = data.slice(offset + 124, offset + 136)
     const sizeStr = new TextDecoder().decode(sizeBytes).replace(/\0/g, '').trim()
     const size = parseInt(sizeStr, 8) || 0
 
-    // Read file type (byte 156)
     const typeFlag = data[offset + 156]
-
-    // Skip to file content (after 512-byte header)
     const contentOffset = offset + 512
 
-    // Type 0 or '0' is regular file, also check for empty type (old tar format)
     if ((typeFlag === 0 || typeFlag === 48) && size > 0) {
       const contentBytes = data.slice(contentOffset, contentOffset + size)
 
@@ -273,7 +247,6 @@ function extractTar(data: Uint8Array): FileEntry[] {
       }
     }
 
-    // Move to next file (content is padded to 512-byte blocks)
     const blocks = Math.ceil(size / 512)
     offset = contentOffset + blocks * 512
   }
@@ -287,6 +260,40 @@ function formatBytes(bytes: number): string {
   const sizes = ['B', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+}
+
+function CodeViewer({ content, language }: { content: string; language: string }) {
+  const highlightedCode = useMemo(() => {
+    const grammar = Prism.languages[language] || Prism.languages.plaintext
+    if (!grammar) {
+      return content
+    }
+    try {
+      return Prism.highlight(content, grammar, language)
+    } catch {
+      return content
+    }
+  }, [content, language])
+
+  const lines = useMemo(() => {
+    return content.split('\n')
+  }, [content])
+
+  return (
+    <div className="code-viewer">
+      <div className="line-numbers">
+        {lines.map((_, i) => (
+          <div key={i} className="line-number">{i + 1}</div>
+        ))}
+      </div>
+      <pre className="code-content">
+        <code
+          className={`language-${language}`}
+          dangerouslySetInnerHTML={{ __html: highlightedCode }}
+        />
+      </pre>
+    </div>
+  )
 }
 
 export default function Viewer() {
@@ -303,8 +310,6 @@ export default function Viewer() {
     total: 0,
     percent: 0
   })
-  const [editorReady, setEditorReady] = useState(false)
-  const editorMountedRef = useRef(false)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -323,7 +328,6 @@ export default function Viewer() {
     fetchAndExtractTexSource(id, setProgress)
       .then((extractedFiles) => {
         setFiles(extractedFiles)
-        // Auto-open the first .tex file
         const firstTeX = extractedFiles.find(f => f.isTeX)
         if (firstTeX) {
           setSelectedFile(firstTeX)
@@ -354,13 +358,6 @@ export default function Viewer() {
       return newTabs
     })
   }, [selectedFile])
-
-  const handleEditorMount = useCallback(() => {
-    if (!editorMountedRef.current) {
-      editorMountedRef.current = true
-      setEditorReady(true)
-    }
-  }, [])
 
   if (loading) {
     return (
@@ -457,33 +454,10 @@ export default function Viewer() {
         )}
         <div className="editor-content">
           {selectedFile ? (
-            <>
-              {!editorReady && (
-                <div className="editor-loading">
-                  <div className="loading-spinner" />
-                  <div>Loading editor...</div>
-                </div>
-              )}
-              <div style={{ height: '100%', display: editorReady ? 'block' : 'none' }}>
-                <Editor
-                  key={selectedFile.name}
-                  height="100%"
-                  language={getLanguage(selectedFile.name)}
-                  value={selectedFile.content}
-                  theme="vs-dark"
-                  onMount={handleEditorMount}
-                  loading=""
-                  options={{
-                    readOnly: true,
-                    minimap: { enabled: true },
-                    fontSize: 14,
-                    wordWrap: 'on',
-                    scrollBeyondLastLine: false,
-                    automaticLayout: true,
-                  }}
-                />
-              </div>
-            </>
+            <CodeViewer
+              content={selectedFile.content}
+              language={getLanguage(selectedFile.name)}
+            />
           ) : (
             <div className="welcome-container">
               <svg viewBox="0 0 24 24" fill="currentColor">
