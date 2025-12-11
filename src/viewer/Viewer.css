@@ -99,6 +99,7 @@
   flex-direction: column;
 }
 
+
 .section-header {
   padding: 6px 20px;
   font-size: 11px;
@@ -109,11 +110,79 @@
   align-items: center;
   justify-content: space-between;
   background-color: var(--bg-secondary);
+  cursor: default;
 }
 
 .section-title {
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-count {
+  font-weight: normal;
+  color: var(--text-secondary);
+}
+
+.file-tree {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 10px;
+}
+
+/* Outline Panel */
+.outline-tree {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 10px;
+}
+
+.outline-item {
+  padding: 4px 8px;
+  padding-right: 12px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  border-left: 2px solid transparent;
+}
+
+.outline-item:hover {
+  background-color: var(--bg-hover);
+}
+
+.outline-item:active {
+  background-color: var(--bg-active);
+  color: var(--text-white);
+}
+
+.outline-icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  color: var(--accent-secondary);
+  opacity: 0.8;
+}
+
+.outline-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.outline-line {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+.tree-item {  text-overflow: ellipsis;
   white-space: nowrap;
   flex: 1;
 }
@@ -571,6 +640,13 @@
 
 .status-item {
   white-space: nowrap;
+}
+
+.status-title {
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: help;
 }
 
 /* Welcome Container */

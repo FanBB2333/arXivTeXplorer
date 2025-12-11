@@ -1,7 +1,14 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { unzipSync, strFromU8, gunzipSync } from 'fflate'
 import Editor, { loader } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
+import { 
+  FileEntry, 
+  SectionInfo, 
+  parseDocumentOutline, 
+  createDefinitionProvider, 
+  createCompletionProvider 
+} from './latex-features'
 import './Viewer.css'
 
 // Configure Monaco to use local bundled version
@@ -30,12 +37,23 @@ monaco.languages.setMonarchTokensProvider('latex', {
       [/\\\[/, { token: 'string.math', next: '@mathDisplay' }],
       [/\\\(/, { token: 'string.math', next: '@mathInline' }],
 
-      // Commands with arguments
-      [/\\(begin|end)(\{)([a-zA-Z*]+)(\})/, ['keyword', 'delimiter.curly', 'variable.environment', 'delimiter.curly']],
-      [/\\(documentclass|usepackage|input|include|bibliography|bibliographystyle)(\[?)/, ['keyword.control', 'delimiter.bracket']],
-      [/\\(section|subsection|subsubsection|paragraph|chapter|part)(\*?)(\{)/, ['keyword.section', 'keyword.section', 'delimiter.curly']],
-      [/\\(label|ref|cite|eqref|pageref|autoref|cref)(\{)/, ['keyword.reference', 'delimiter.curly']],
+      // Environments: \begin{...} / \end{...}
+      [/\\(begin|end)(\{)/, ['keyword', { token: 'delimiter.curly', next: '@environmentArg' }]],
+
+      // References: \ref{...} / \label{...} / \cite{...}
+      [/\\(label|ref|eqref|pageref|autoref|cref)(\{)/, ['keyword.reference', { token: 'delimiter.curly', next: '@referenceArg' }]],
+      [/\\(cite|citep|citet)(\{)/, ['keyword.reference', { token: 'delimiter.curly', next: '@citationArg' }]],
+
+      // File imports: \input{...} / \include{...}
+      [/\\(input|include|bibliography|bibliographystyle)(\{)/, ['keyword.control', { token: 'delimiter.curly', next: '@fileArg' }]],
+
+      // Sections
+      [/\\(part|chapter|section|subsection|subsubsection|paragraph)(\*?)(\{)/, ['keyword.section', 'keyword.section', { token: 'delimiter.curly', next: '@sectionArg' }]],
+
+      // Commands with styles
       [/\\(textbf|textit|texttt|textrm|textsf|textsc|emph|underline)(\{)/, ['keyword.style', 'delimiter.curly']],
+      
+      // Definitions
       [/\\(newcommand|renewcommand|providecommand|DeclareMathOperator)(\*?)(\{)/, ['keyword.definition', 'keyword.definition', 'delimiter.curly']],
 
       // General commands
@@ -50,6 +68,43 @@ monaco.languages.setMonarchTokensProvider('latex', {
 
       // Numbers
       [/\d+/, 'number'],
+    ],
+
+    // Argument state for environments
+    environmentArg: [
+      [/[^}]+/, 'variable.environment'],
+      [/\}/, { token: 'delimiter.curly', next: '@pop' }]
+    ],
+
+    // Argument state for references
+    referenceArg: [
+      [/[^}]+/, 'variable.parameter'], // We use parameter color for labels
+      [/\}/, { token: 'delimiter.curly', next: '@pop' }]
+    ],
+
+    // Argument state for citations
+    citationArg: [
+      [/[^,}]+/, 'variable.parameter'], 
+      [/,/, 'delimiter'],
+      [/\}/, { token: 'delimiter.curly', next: '@pop' }]
+    ],
+
+     // Argument state for files
+    fileArg: [
+      [/[^}]+/, 'string.link'], 
+      [/\}/, { token: 'delimiter.curly', next: '@pop' }]
+    ],
+
+    // Argument state for sections (just string but we might want to stay in root for nested commands?)
+    // For simplicity, we assume text. If we want nested commands inside section titles to work,
+    // we should include 'root' or similar. But monarch is stack based.
+    // Let's just consume until brace for now or push root?
+    // Pushing root allows nested commands but we need to know when to pop.
+    // Monarch doesn't easily support balanced braces in a sub-state without specific brace counting rules.
+    // Let's stick to simple text for section titles in this view.
+    sectionArg: [
+       [/[^}]+/, 'string'],
+       [/\}/, { token: 'delimiter.curly', next: '@pop' }]
     ],
 
     mathDouble: [
@@ -142,14 +197,8 @@ monaco.languages.setMonarchTokensProvider('bibtex', {
   }
 })
 
-interface FileEntry {
-  name: string
-  content: string
-  isTeX: boolean
-  isBinary: boolean
-  binaryData?: Uint8Array
-  mimeType?: string
-}
+// Use types from latex-features
+
 
 interface DownloadProgress {
   phase: 'downloading' | 'extracting' | 'done'
@@ -880,9 +929,45 @@ export default function Viewer() {
   const [showSearch, setShowSearch] = useState(false)
   const [goToLine, setGoToLine] = useState<number | null>(null)
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
+  const [activeView, setActiveView] = useState<'explorer' | 'outline'>('explorer')
+  const [outline, setOutline] = useState<SectionInfo[]>([])
+  const [fontSize, setFontSize] = useState(14)
   const editorRef = useRef<any>(null)
 
   const fileTree = buildFileTree(files)
+
+  // Memoize outline parsing
+  useEffect(() => {
+    if (files.length > 0) {
+      setOutline(parseDocumentOutline(files))
+    }
+  }, [files])
+
+  // Register providers
+  useEffect(() => {
+    if (files.length === 0) return
+
+    // Create a getter for current files to avoid stale closures if configured poorly,
+    // but here we just rebuild providers when files change is okay too.
+    // However, recreating providers on every render is bad.
+    // We should register once when files are ready.
+    
+    // Dispose previous providers if any (tricky to track without disposables list)
+    // For this simple app, we can just register. Monaco cleans up if we overwrite?
+    // Actually no, it stacks. We should return a cleanup function.
+    
+    // Since this component might remount or files change, we want to be safe.
+    // In a real app we'd keep track of disposables.
+    
+    const defProvider = monaco.languages.registerDefinitionProvider('latex', createDefinitionProvider(() => files))
+    const compProvider = monaco.languages.registerCompletionItemProvider('latex', createCompletionProvider(() => files))
+    
+    return () => {
+      defProvider.dispose()
+      compProvider.dispose()
+    }
+  }, [files])
+
 
   const handleToggleFolder = useCallback((path: string) => {
     setExpandedFolders(prev => {
@@ -975,6 +1060,17 @@ export default function Viewer() {
 
   const handleEditorMount = (editor: any) => {
     editorRef.current = editor
+
+    // Ctrl/Cmd + Wheel zoom
+    editor.getDomNode()?.addEventListener('wheel', (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault()
+        setFontSize(prev => {
+          const delta = e.deltaY > 0 ? -1 : 1
+          return Math.max(8, Math.min(32, prev + delta))
+        })
+      }
+    }, { passive: false })
   }
 
   if (loading) {
@@ -1062,7 +1158,7 @@ export default function Viewer() {
         options={{
           readOnly: true,
           minimap: { enabled: true },
-          fontSize: 14,
+          fontSize: fontSize,
           lineNumbers: 'on',
           scrollBeyondLastLine: false,
           wordWrap: 'off',
@@ -1083,8 +1179,12 @@ export default function Viewer() {
       {/* Activity Bar */}
       <div className="activity-bar">
         <button
-          className={`activity-button ${!showSearch ? 'active' : ''}`}
-          onClick={() => setShowSearch(false)}
+          className={`activity-button ${activeView === 'explorer' && !showSearch ? 'active' : ''}`}
+          onClick={() => {
+            setShowSearch(false)
+            setActiveView('explorer')
+          }}
+
           title="Explorer"
         >
           <svg viewBox="0 0 24 24" fill="currentColor">
@@ -1100,14 +1200,26 @@ export default function Viewer() {
             <path d="M15.25 0a8.25 8.25 0 0 0-6.18 13.72L1 22.88l1.12 1.12 8.05-9.12A8.251 8.251 0 1 0 15.25.01V0zm0 15a6.75 6.75 0 1 1 0-13.5 6.75 6.75 0 0 1 0 13.5z"/>
           </svg>
         </button>
+        <button
+          className={`activity-button ${activeView === 'outline' && !showSearch ? 'active' : ''}`}
+          onClick={() => {
+            setShowSearch(false)
+            setActiveView('outline')
+          }}
+          title="Outline"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M3 3h18v2H3V3zm0 4h12v2H3V7zm0 4h18v2H3v-2zm0 4h12v2H3v-2zm0 4h18v2H3v-2z"/>
+          </svg>
+        </button>
       </div>
 
       {/* Sidebar */}
       <div className="sidebar" style={{ display: showSearch ? 'none' : 'flex' }}>
         <div className="sidebar-header">
-          <span className="sidebar-title">EXPLORER</span>
+          <span className="sidebar-title">{activeView === 'explorer' ? 'EXPLORER' : 'OUTLINE'}</span>
         </div>
-        <div className="sidebar-section">
+        <div className="sidebar-section" style={{ display: activeView === 'explorer' ? 'flex' : 'none' }}>
           <div className="section-header">
             <span className="section-title">{title}</span>
             <span className="file-count">{files.length} files</span>
@@ -1124,6 +1236,42 @@ export default function Viewer() {
                 onToggleFolder={handleToggleFolder}
               />
             ))}
+          </div>
+        </div>
+
+        
+        {/* Outline View */}
+        <div className="sidebar-section" style={{ display: activeView === 'outline' ? 'flex' : 'none' }}>
+           <div className="section-header" style={{ display: 'none' }}>
+            {/* Outline title usually redundant if sidebar title says Outline, but let's keep consistent structure */}
+            <span className="section-title">STRUCTURE</span>
+          </div>
+          <div className="outline-tree">
+            {outline.length === 0 ? (
+              <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '12px' }}>
+                No sections found
+              </div>
+            ) : (
+              outline.map((item, i) => (
+                <div 
+                  key={item.id + i} 
+                  className="outline-item"
+                  style={{ paddingLeft: `${8 + item.level * 12}px` }}
+                  onClick={() => {
+                    const f = files.find(f => f.name === item.file)
+                    if (f) handleSearchResultClick(f, item.line)
+                  }}
+                >
+                  <span className="outline-icon">
+                    <svg viewBox="0 0 16 16" fill="currentColor">
+                       <circle cx="8" cy="8" r={item.level <= 1 ? 4 : 2} />
+                    </svg>
+                  </span>
+                  <span className="outline-label">{item.title}</span>
+                  <span className="outline-line">{item.line}</span>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
@@ -1167,6 +1315,7 @@ export default function Viewer() {
         <div className="status-bar">
           <div className="status-left">
             <span className="status-item">{arxivId}</span>
+            {title && <span className="status-item status-title" title={title}>{title}</span>}
           </div>
           <div className="status-right">
             {selectedFile && !selectedFile.isBinary && (
