@@ -1,9 +1,9 @@
 {
-  "name": "arxivtexplorer",
-  "displayName": "arXivTeXplorer",
-  "version": "0.1.0",
-  "author": "**",
-  "description": "View arXiv paper TeX source in a VS Code-like interface",
+  "name": "xtx",
+  "displayName": "XTX-arXivTeXplorer",
+  "version": "1.0.0",
+  "author": "L1ght",
+  "description": "View arXiv paper TeX source in an online editor-like interface",
   "type": "module",
   "license": "MIT",
   "keywords": [
