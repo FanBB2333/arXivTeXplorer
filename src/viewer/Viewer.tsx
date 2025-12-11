@@ -31,6 +31,72 @@ interface SearchResult {
   matchEnd: number
 }
 
+interface TreeNode {
+  name: string
+  path: string
+  isFolder: boolean
+  children: TreeNode[]
+  file?: FileEntry
+}
+
+function buildFileTree(files: FileEntry[]): TreeNode[] {
+  const root: TreeNode[] = []
+
+  for (const file of files) {
+    const parts = file.name.split('/')
+    let currentLevel = root
+    let currentPath = ''
+
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i]
+      currentPath = currentPath ? `${currentPath}/${part}` : part
+      const isLastPart = i === parts.length - 1
+
+      let existing = currentLevel.find(node => node.name === part)
+
+      if (!existing) {
+        const newNode: TreeNode = {
+          name: part,
+          path: currentPath,
+          isFolder: !isLastPart,
+          children: [],
+          file: isLastPart ? file : undefined
+        }
+        currentLevel.push(newNode)
+        existing = newNode
+      }
+
+      if (!isLastPart) {
+        currentLevel = existing.children
+      }
+    }
+  }
+
+  // Sort: folders first, then files, alphabetically within each group
+  const sortNodes = (nodes: TreeNode[]): TreeNode[] => {
+    nodes.sort((a, b) => {
+      if (a.isFolder && !b.isFolder) return -1
+      if (!a.isFolder && b.isFolder) return 1
+      // TeX files first among files
+      if (!a.isFolder && !b.isFolder) {
+        const aIsTex = a.file?.isTeX || false
+        const bIsTex = b.file?.isTeX || false
+        if (aIsTex && !bIsTex) return -1
+        if (!aIsTex && bIsTex) return 1
+      }
+      return a.name.localeCompare(b.name)
+    })
+    for (const node of nodes) {
+      if (node.children.length > 0) {
+        sortNodes(node.children)
+      }
+    }
+    return nodes
+  }
+
+  return sortNodes(root)
+}
+
 function getFileIcon(filename: string): string {
   const ext = filename.split('.').pop()?.toLowerCase()
   switch (ext) {
@@ -421,6 +487,74 @@ function BinaryViewer({ file }: { file: FileEntry }) {
   )
 }
 
+function FileTreeNode({
+  node,
+  depth,
+  selectedFile,
+  expandedFolders,
+  onFileClick,
+  onToggleFolder
+}: {
+  node: TreeNode
+  depth: number
+  selectedFile: FileEntry | null
+  expandedFolders: Set<string>
+  onFileClick: (file: FileEntry) => void
+  onToggleFolder: (path: string) => void
+}) {
+  const isExpanded = expandedFolders.has(node.path)
+  const isSelected = !node.isFolder && selectedFile?.name === node.file?.name
+
+  const handleClick = () => {
+    if (node.isFolder) {
+      onToggleFolder(node.path)
+    } else if (node.file) {
+      onFileClick(node.file)
+    }
+  }
+
+  return (
+    <>
+      <div
+        className={`tree-item ${isSelected ? 'active' : ''}`}
+        style={{ paddingLeft: `${12 + depth * 16}px` }}
+        onClick={handleClick}
+      >
+        {node.isFolder ? (
+          <span className="tree-chevron">
+            {isExpanded ? (
+              <svg viewBox="0 0 16 16" fill="currentColor">
+                <path d="M5.7 13.7L5 13l4.6-4.6L5 3.7l.7-.7 5.3 5.4-5.3 5.3z" transform="rotate(90 8 8)" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 16 16" fill="currentColor">
+                <path d="M5.7 13.7L5 13l4.6-4.6L5 3.7l.7-.7 5.3 5.4-5.3 5.3z" />
+              </svg>
+            )}
+          </span>
+        ) : (
+          <span className="tree-chevron-placeholder" />
+        )}
+        <span className="tree-icon">
+          {node.isFolder ? (isExpanded ? '📂' : '📁') : getFileIcon(node.name)}
+        </span>
+        <span className="tree-name">{node.name}</span>
+      </div>
+      {node.isFolder && isExpanded && node.children.map(child => (
+        <FileTreeNode
+          key={child.path}
+          node={child}
+          depth={depth + 1}
+          selectedFile={selectedFile}
+          expandedFolders={expandedFolders}
+          onFileClick={onFileClick}
+          onToggleFolder={onToggleFolder}
+        />
+      ))}
+    </>
+  )
+}
+
 function SearchPanel({ files, onResultClick, onClose }: {
   files: FileEntry[]
   onResultClick: (file: FileEntry, line: number) => void
@@ -535,7 +669,22 @@ export default function Viewer() {
   })
   const [showSearch, setShowSearch] = useState(false)
   const [goToLine, setGoToLine] = useState<number | null>(null)
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   const editorRef = useRef<any>(null)
+
+  const fileTree = buildFileTree(files)
+
+  const handleToggleFolder = useCallback((path: string) => {
+    setExpandedFolders(prev => {
+      const next = new Set(prev)
+      if (next.has(path)) {
+        next.delete(path)
+      } else {
+        next.add(path)
+      }
+      return next
+    })
+  }, [])
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -753,16 +902,17 @@ export default function Viewer() {
             <span className="section-title">{title}</span>
             <span className="file-count">{files.length} files</span>
           </div>
-          <div className="file-list">
-            {files.map((file) => (
-              <div
-                key={file.name}
-                className={`file-item ${selectedFile?.name === file.name ? 'active' : ''}`}
-                onClick={() => handleFileClick(file)}
-              >
-                <span className="file-icon">{getFileIcon(file.name)}</span>
-                <span className="file-name">{file.name}</span>
-              </div>
+          <div className="file-tree">
+            {fileTree.map(node => (
+              <FileTreeNode
+                key={node.path}
+                node={node}
+                depth={0}
+                selectedFile={selectedFile}
+                expandedFolders={expandedFolders}
+                onFileClick={handleFileClick}
+                onToggleFolder={handleToggleFolder}
+              />
             ))}
           </div>
         </div>

@@ -124,6 +124,63 @@
   margin-left: 8px;
 }
 
+/* File Tree */
+.file-tree {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.tree-item {
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.tree-item:hover {
+  background-color: var(--bg-hover);
+}
+
+.tree-item.active {
+  background-color: var(--bg-active);
+}
+
+.tree-chevron {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tree-chevron svg {
+  width: 12px;
+  height: 12px;
+  fill: var(--text-secondary);
+}
+
+.tree-chevron-placeholder {
+  width: 16px;
+  flex-shrink: 0;
+}
+
+.tree-icon {
+  flex-shrink: 0;
+  font-size: 14px;
+}
+
+.tree-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Legacy file list styles (kept for compatibility) */
 .file-list {
   flex: 1;
   overflow-y: auto;
