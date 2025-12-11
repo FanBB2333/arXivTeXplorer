@@ -1,12 +1,26 @@
-import { useState, useEffect, useCallback } from 'react'
-import Editor from '@monaco-editor/react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import Editor, { loader } from '@monaco-editor/react'
 import { unzipSync, strFromU8, gunzipSync } from 'fflate'
 import './Viewer.css'
+
+// Configure Monaco loader to use CDN
+loader.config({
+  paths: {
+    vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs'
+  }
+})
 
 interface FileEntry {
   name: string
   content: string
   isTeX: boolean
+}
+
+interface DownloadProgress {
+  phase: 'downloading' | 'extracting' | 'done'
+  loaded: number
+  total: number
+  percent: number
 }
 
 function getFileIcon(filename: string): string {
@@ -59,7 +73,10 @@ function isTextFile(filename: string): boolean {
   return ext ? textExtensions.includes(ext) : false
 }
 
-async function fetchAndExtractTexSource(arxivId: string): Promise<FileEntry[]> {
+async function fetchAndExtractTexSource(
+  arxivId: string,
+  onProgress: (progress: DownloadProgress) => void
+): Promise<FileEntry[]> {
   const sourceUrl = `https://arxiv.org/src/${arxivId}`
 
   const response = await fetch(sourceUrl)
@@ -67,10 +84,49 @@ async function fetchAndExtractTexSource(arxivId: string): Promise<FileEntry[]> {
     throw new Error(`Failed to fetch TeX source: ${response.status} ${response.statusText}`)
   }
 
-  const contentType = response.headers.get('content-type') || ''
-  const arrayBuffer = await response.arrayBuffer()
-  const data = new Uint8Array(arrayBuffer)
+  const contentLength = response.headers.get('content-length')
+  const total = contentLength ? parseInt(contentLength, 10) : 0
 
+  // Read response with progress
+  const reader = response.body?.getReader()
+  if (!reader) {
+    throw new Error('Failed to get response reader')
+  }
+
+  const chunks: Uint8Array[] = []
+  let loaded = 0
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    chunks.push(value)
+    loaded += value.length
+
+    onProgress({
+      phase: 'downloading',
+      loaded,
+      total: total || loaded,
+      percent: total ? Math.round((loaded / total) * 100) : 0
+    })
+  }
+
+  // Combine chunks
+  const data = new Uint8Array(loaded)
+  let offset = 0
+  for (const chunk of chunks) {
+    data.set(chunk, offset)
+    offset += chunk.length
+  }
+
+  onProgress({
+    phase: 'extracting',
+    loaded,
+    total: loaded,
+    percent: 100
+  })
+
+  const contentType = response.headers.get('content-type') || ''
   const files: FileEntry[] = []
 
   // Check if it's a gzipped file (single .tex file)
@@ -87,7 +143,7 @@ async function fetchAndExtractTexSource(arxivId: string): Promise<FileEntry[]> {
         // Single file
         const content = strFromU8(decompressed)
         files.push({
-          name: `${arxivId}.tex`,
+          name: `${arxivId.replace(/\//g, '_')}.tex`,
           content,
           isTeX: true
         })
@@ -96,7 +152,7 @@ async function fetchAndExtractTexSource(arxivId: string): Promise<FileEntry[]> {
       // Maybe it's plain text that starts with those bytes
       const content = new TextDecoder().decode(data)
       files.push({
-        name: `${arxivId}.tex`,
+        name: `${arxivId.replace(/\//g, '_')}.tex`,
         content,
         isTeX: true
       })
@@ -109,7 +165,7 @@ async function fetchAndExtractTexSource(arxivId: string): Promise<FileEntry[]> {
     // Plain text file
     const content = new TextDecoder().decode(data)
     files.push({
-      name: `${arxivId}.tex`,
+      name: `${arxivId.replace(/\//g, '_')}.tex`,
       content,
       isTeX: true
     })
@@ -136,7 +192,7 @@ async function fetchAndExtractTexSource(arxivId: string): Promise<FileEntry[]> {
       // Try as plain text
       const content = new TextDecoder().decode(data)
       files.push({
-        name: `${arxivId}.tex`,
+        name: `${arxivId.replace(/\//g, '_')}.tex`,
         content,
         isTeX: true
       })
@@ -148,6 +204,13 @@ async function fetchAndExtractTexSource(arxivId: string): Promise<FileEntry[]> {
     if (a.isTeX && !b.isTeX) return -1
     if (!a.isTeX && b.isTeX) return 1
     return a.name.localeCompare(b.name)
+  })
+
+  onProgress({
+    phase: 'done',
+    loaded,
+    total: loaded,
+    percent: 100
   })
 
   return files
@@ -218,6 +281,14 @@ function extractTar(data: Uint8Array): FileEntry[] {
   return files
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+}
+
 export default function Viewer() {
   const [files, setFiles] = useState<FileEntry[]>([])
   const [selectedFile, setSelectedFile] = useState<FileEntry | null>(null)
@@ -226,6 +297,14 @@ export default function Viewer() {
   const [error, setError] = useState<string | null>(null)
   const [arxivId, setArxivId] = useState<string>('')
   const [title, setTitle] = useState<string>('')
+  const [progress, setProgress] = useState<DownloadProgress>({
+    phase: 'downloading',
+    loaded: 0,
+    total: 0,
+    percent: 0
+  })
+  const [editorReady, setEditorReady] = useState(false)
+  const editorMountedRef = useRef(false)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -241,7 +320,7 @@ export default function Viewer() {
       return
     }
 
-    fetchAndExtractTexSource(id)
+    fetchAndExtractTexSource(id, setProgress)
       .then((extractedFiles) => {
         setFiles(extractedFiles)
         // Auto-open the first .tex file
@@ -276,11 +355,50 @@ export default function Viewer() {
     })
   }, [selectedFile])
 
+  const handleEditorMount = useCallback(() => {
+    if (!editorMountedRef.current) {
+      editorMountedRef.current = true
+      setEditorReady(true)
+    }
+  }, [])
+
   if (loading) {
     return (
       <div className="loading-container">
-        <div className="loading-spinner" />
-        <div className="loading-text">Loading TeX source for {arxivId}...</div>
+        <div className="loading-content">
+          <div className="loading-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
+          </div>
+          <div className="loading-title">
+            {progress.phase === 'downloading' ? 'Downloading TeX Source' : 'Extracting Files'}
+          </div>
+          <div className="loading-arxiv-id">{arxivId}</div>
+
+          <div className="progress-container">
+            <div className="progress-bar">
+              <div
+                className="progress-fill"
+                style={{ width: `${progress.percent}%` }}
+              />
+            </div>
+            <div className="progress-info">
+              {progress.phase === 'downloading' ? (
+                <>
+                  <span>{formatBytes(progress.loaded)}</span>
+                  {progress.total > 0 && (
+                    <span> / {formatBytes(progress.total)}</span>
+                  )}
+                  <span className="progress-percent"> ({progress.percent}%)</span>
+                </>
+              ) : (
+                <span>Processing archive...</span>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     )
   }
@@ -339,20 +457,33 @@ export default function Viewer() {
         )}
         <div className="editor-content">
           {selectedFile ? (
-            <Editor
-              height="100%"
-              language={getLanguage(selectedFile.name)}
-              value={selectedFile.content}
-              theme="vs-dark"
-              options={{
-                readOnly: true,
-                minimap: { enabled: true },
-                fontSize: 14,
-                wordWrap: 'on',
-                scrollBeyondLastLine: false,
-                automaticLayout: true,
-              }}
-            />
+            <>
+              {!editorReady && (
+                <div className="editor-loading">
+                  <div className="loading-spinner" />
+                  <div>Loading editor...</div>
+                </div>
+              )}
+              <div style={{ height: '100%', display: editorReady ? 'block' : 'none' }}>
+                <Editor
+                  key={selectedFile.name}
+                  height="100%"
+                  language={getLanguage(selectedFile.name)}
+                  value={selectedFile.content}
+                  theme="vs-dark"
+                  onMount={handleEditorMount}
+                  loading=""
+                  options={{
+                    readOnly: true,
+                    minimap: { enabled: true },
+                    fontSize: 14,
+                    wordWrap: 'on',
+                    scrollBeyondLastLine: false,
+                    automaticLayout: true,
+                  }}
+                />
+              </div>
+            </>
           ) : (
             <div className="welcome-container">
               <svg viewBox="0 0 24 24" fill="currentColor">

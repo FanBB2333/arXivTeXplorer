@@ -20,8 +20,8 @@
   background-color: #2d2d2d;
   border-bottom: 1px solid #3c3c3c;
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .sidebar-header h1 {
@@ -31,6 +31,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  margin: 0;
 }
 
 .sidebar-header .arxiv-id {
@@ -73,7 +74,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #e5a520;
 }
 
 .file-item .file-name {
@@ -139,6 +139,7 @@
 .editor-content {
   flex: 1;
   overflow: hidden;
+  position: relative;
 }
 
 .loading-container {
@@ -147,14 +148,88 @@
   align-items: center;
   justify-content: center;
   height: 100%;
+  background-color: #1e1e1e;
+}
+
+.loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   gap: 16px;
+  max-width: 400px;
+  width: 100%;
+  padding: 24px;
+}
+
+.loading-icon {
+  width: 64px;
+  height: 64px;
+  color: #667eea;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.loading-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.loading-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.loading-arxiv-id {
+  font-size: 14px;
+  color: #808080;
+  font-family: monospace;
+}
+
+.progress-container {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background-color: #3c3c3c;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+  border-radius: 4px;
+  transition: width 0.2s ease;
+}
+
+.progress-info {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #808080;
+  text-align: center;
+}
+
+.progress-percent {
+  color: #667eea;
 }
 
 .loading-spinner {
   width: 40px;
   height: 40px;
   border: 3px solid #3c3c3c;
-  border-top-color: #0098ff;
+  border-top-color: #667eea;
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -170,6 +245,23 @@
   color: #808080;
 }
 
+.editor-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background-color: #1e1e1e;
+  color: #808080;
+  font-size: 14px;
+  z-index: 10;
+}
+
 .error-container {
   display: flex;
   flex-direction: column;
@@ -179,6 +271,7 @@
   gap: 16px;
   padding: 24px;
   text-align: center;
+  background-color: #1e1e1e;
 }
 
 .error-icon {
