@@ -172,46 +172,21 @@
 
 .tree-icon {
   flex-shrink: 0;
-  font-size: 14px;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* File icon SVG styles */
+.file-icon-svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
 }
 
 .tree-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Legacy file list styles (kept for compatibility) */
-.file-list {
-  flex: 1;
-  overflow-y: auto;
-}
-
-.file-item {
-  padding: 4px 8px 4px 20px;
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-  overflow: hidden;
-}
-
-.file-item:hover {
-  background-color: var(--bg-hover);
-}
-
-.file-item.active {
-  background-color: var(--bg-active);
-}
-
-.file-icon {
-  flex-shrink: 0;
-  font-size: 14px;
-}
-
-.file-name {
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -310,6 +285,16 @@
 
 .result-file-icon {
   margin-right: 4px;
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.result-file-icon .file-icon-svg {
+  width: 14px;
+  height: 14px;
 }
 
 .result-file-name {
@@ -384,7 +369,16 @@
 }
 
 .tab-icon {
-  font-size: 12px;
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tab-icon .file-icon-svg {
+  width: 14px;
+  height: 14px;
 }
 
 .tab-name {
@@ -531,7 +525,13 @@
 }
 
 .binary-icon {
-  font-size: 64px;
+  width: 64px;
+  height: 64px;
+}
+
+.binary-icon-svg {
+  width: 64px;
+  height: 64px;
 }
 
 .binary-name {

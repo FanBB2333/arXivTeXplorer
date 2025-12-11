@@ -97,31 +97,100 @@ function buildFileTree(files: FileEntry[]): TreeNode[] {
   return sortNodes(root)
 }
 
-function getFileIcon(filename: string): string {
+// VS Code style flat file icons
+function FileIcon({ filename, className }: { filename: string; className?: string }) {
   const ext = filename.split('.').pop()?.toLowerCase()
-  switch (ext) {
-    case 'tex':
-      return '📄'
-    case 'bib':
-      return '📚'
-    case 'sty':
-      return '🎨'
-    case 'cls':
-      return '📋'
-    case 'bst':
-      return '📖'
-    case 'eps':
-    case 'pdf':
-      return '📑'
-    case 'png':
-    case 'jpg':
-    case 'jpeg':
-    case 'gif':
-    case 'svg':
-      return '🖼️'
-    default:
-      return '📝'
+  const cls = className || 'file-icon-svg'
+
+  // TeX file - green
+  if (ext === 'tex' || ext === 'ltx' || ext === 'dtx') {
+    return (
+      <svg className={cls} viewBox="0 0 16 16" fill="none">
+        <path d="M13 1H5L3 3v10l2 2h8l2-2V3l-2-2z" fill="#4a9c5d"/>
+        <text x="8" y="11" textAnchor="middle" fill="white" fontSize="5" fontWeight="bold" fontFamily="sans-serif">TeX</text>
+      </svg>
+    )
   }
+
+  // BibTeX file - orange
+  if (ext === 'bib' || ext === 'bst') {
+    return (
+      <svg className={cls} viewBox="0 0 16 16" fill="none">
+        <path d="M13 1H5L3 3v10l2 2h8l2-2V3l-2-2z" fill="#cc7832"/>
+        <text x="8" y="11" textAnchor="middle" fill="white" fontSize="5" fontWeight="bold" fontFamily="sans-serif">BIB</text>
+      </svg>
+    )
+  }
+
+  // Style file - purple
+  if (ext === 'sty' || ext === 'cls') {
+    return (
+      <svg className={cls} viewBox="0 0 16 16" fill="none">
+        <path d="M13 1H5L3 3v10l2 2h8l2-2V3l-2-2z" fill="#9876aa"/>
+        <text x="8" y="11" textAnchor="middle" fill="white" fontSize="5" fontWeight="bold" fontFamily="sans-serif">STY</text>
+      </svg>
+    )
+  }
+
+  // PDF file - red
+  if (ext === 'pdf') {
+    return (
+      <svg className={cls} viewBox="0 0 16 16" fill="none">
+        <path d="M13 1H5L3 3v10l2 2h8l2-2V3l-2-2z" fill="#e74c3c"/>
+        <text x="8" y="11" textAnchor="middle" fill="white" fontSize="4.5" fontWeight="bold" fontFamily="sans-serif">PDF</text>
+      </svg>
+    )
+  }
+
+  // EPS file - teal
+  if (ext === 'eps') {
+    return (
+      <svg className={cls} viewBox="0 0 16 16" fill="none">
+        <path d="M13 1H5L3 3v10l2 2h8l2-2V3l-2-2z" fill="#16a085"/>
+        <text x="8" y="11" textAnchor="middle" fill="white" fontSize="4.5" fontWeight="bold" fontFamily="sans-serif">EPS</text>
+      </svg>
+    )
+  }
+
+  // Image files - blue
+  if (['png', 'jpg', 'jpeg', 'gif', 'svg'].includes(ext || '')) {
+    return (
+      <svg className={cls} viewBox="0 0 16 16" fill="none">
+        <rect x="2" y="2" width="12" height="12" rx="1" fill="#3498db"/>
+        <circle cx="5.5" cy="5.5" r="1.5" fill="white"/>
+        <path d="M3 12l3-4 2 2 3-3 2 3v2H3z" fill="white" opacity="0.9"/>
+      </svg>
+    )
+  }
+
+  // Default file icon - gray
+  return (
+    <svg className={cls} viewBox="0 0 16 16" fill="none">
+      <path d="M10 1H4a1 1 0 00-1 1v12a1 1 0 001 1h8a1 1 0 001-1V4l-3-3z" fill="#6b7280"/>
+      <path d="M10 1v3h3" fill="#9ca3af"/>
+      <path d="M5 7h6M5 9h6M5 11h4" stroke="white" strokeWidth="0.8" opacity="0.7"/>
+    </svg>
+  )
+}
+
+// Folder icons
+function FolderIcon({ isOpen, className }: { isOpen: boolean; className?: string }) {
+  const cls = className || 'file-icon-svg'
+
+  if (isOpen) {
+    return (
+      <svg className={cls} viewBox="0 0 16 16" fill="none">
+        <path d="M1.5 3A1.5 1.5 0 013 1.5h3.293a1 1 0 01.707.293L8.5 3.5H13A1.5 1.5 0 0114.5 5v1h-13V3z" fill="#dcb67a"/>
+        <path d="M1 6h14l-1.5 8H2.5L1 6z" fill="#e8c77b"/>
+      </svg>
+    )
+  }
+
+  return (
+    <svg className={cls} viewBox="0 0 16 16" fill="none">
+      <path d="M1.5 3A1.5 1.5 0 013 1.5h3.293a1 1 0 01.707.293L8.5 3.5H13A1.5 1.5 0 0114.5 5v8a1.5 1.5 0 01-1.5 1.5H3A1.5 1.5 0 011.5 13V3z" fill="#dcb67a"/>
+    </svg>
+  )
 }
 
 function getLanguage(filename: string): string {
@@ -477,7 +546,9 @@ function PdfViewer({ file }: { file: FileEntry }) {
 function BinaryViewer({ file }: { file: FileEntry }) {
   return (
     <div className="binary-viewer">
-      <div className="binary-icon">{getFileIcon(file.name)}</div>
+      <div className="binary-icon">
+        <FileIcon filename={file.name} className="binary-icon-svg" />
+      </div>
       <div className="binary-name">{file.name}</div>
       <div className="binary-info">
         Binary file • {file.binaryData ? formatBytes(file.binaryData.length) : 'Unknown size'}
@@ -536,7 +607,11 @@ function FileTreeNode({
           <span className="tree-chevron-placeholder" />
         )}
         <span className="tree-icon">
-          {node.isFolder ? (isExpanded ? '📂' : '📁') : getFileIcon(node.name)}
+          {node.isFolder ? (
+            <FolderIcon isOpen={isExpanded} />
+          ) : (
+            <FileIcon filename={node.name} />
+          )}
         </span>
         <span className="tree-name">{node.name}</span>
       </div>
@@ -634,7 +709,7 @@ function SearchPanel({ files, onResultClick, onClose }: {
             onClick={() => onResultClick(result.file, result.line)}
           >
             <div className="result-file">
-              <span className="result-file-icon">{getFileIcon(result.file.name)}</span>
+              <span className="result-file-icon"><FileIcon filename={result.file.name} /></span>
               <span className="result-file-name">{result.file.name}</span>
               <span className="result-line-number">:{result.line}</span>
             </div>
@@ -937,7 +1012,7 @@ export default function Viewer() {
                 className={`editor-tab ${selectedFile?.name === tab.name ? 'active' : ''}`}
                 onClick={() => setSelectedFile(tab)}
               >
-                <span className="tab-icon">{getFileIcon(tab.name)}</span>
+                <span className="tab-icon"><FileIcon filename={tab.name} /></span>
                 <span className="tab-name">{tab.name}</span>
                 <span
                   className="tab-close"
