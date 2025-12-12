@@ -742,13 +742,123 @@ function BinaryViewer({ file }: { file: FileEntry }) {
   )
 }
 
+// Context Menu Component
+interface ContextMenuProps {
+  x: number
+  y: number
+  file: FileEntry
+  onClose: () => void
+  onDownload: (file: FileEntry) => void
+  onCopyPath: (file: FileEntry) => void
+  onCopyContent: (file: FileEntry) => void
+  onCopyAsLatex: (file: FileEntry) => void
+  onFindReferences: (file: FileEntry) => void
+  onOpenInNewTab: (file: FileEntry) => void
+}
+
+function ContextMenu({ x, y, file, onClose, onDownload, onCopyPath, onCopyContent, onCopyAsLatex, onFindReferences, onOpenInNewTab }: ContextMenuProps) {
+  const menuRef = useRef<HTMLDivElement>(null)
+  const [position, setPosition] = useState({ x, y })
+
+  useEffect(() => {
+    // Adjust position if menu would be off-screen
+    if (menuRef.current) {
+      const rect = menuRef.current.getBoundingClientRect()
+      let newX = x
+      let newY = y
+      if (x + rect.width > window.innerWidth) {
+        newX = window.innerWidth - rect.width - 10
+      }
+      if (y + rect.height > window.innerHeight) {
+        newY = window.innerHeight - rect.height - 10
+      }
+      setPosition({ x: newX, y: newY })
+    }
+  }, [x, y])
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        onClose()
+      }
+    }
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleEscape)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [onClose])
+
+  const isTeX = file.name.endsWith('.tex')
+
+  return (
+    <div
+      ref={menuRef}
+      className="context-menu"
+      style={{ left: position.x, top: position.y }}
+    >
+      <div className="context-menu-item" onClick={() => { onOpenInNewTab(file); onClose() }}>
+        <span className="context-menu-icon">
+          <svg viewBox="0 0 16 16"><path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5zM13 5H9.5V1.5L13 5z"/></svg>
+        </span>
+        Open in New Tab
+      </div>
+      <div className="context-menu-separator" />
+      <div className="context-menu-item" onClick={() => { onDownload(file); onClose() }}>
+        <span className="context-menu-icon">
+          <svg viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/></svg>
+        </span>
+        Download
+      </div>
+      <div className="context-menu-separator" />
+      <div className="context-menu-item" onClick={() => { onCopyPath(file); onClose() }}>
+        <span className="context-menu-icon">
+          <svg viewBox="0 0 16 16"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3z"/></svg>
+        </span>
+        Copy Path
+      </div>
+      {!file.isBinary && (
+        <div className="context-menu-item" onClick={() => { onCopyContent(file); onClose() }}>
+          <span className="context-menu-icon">
+            <svg viewBox="0 0 16 16"><path d="M4 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V2zm2-1a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H6zM2 5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-1h1v1a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h1v1H2z"/></svg>
+          </span>
+          Copy Content
+        </div>
+      )}
+      {isTeX && (
+        <div className="context-menu-item" onClick={() => { onCopyAsLatex(file); onClose() }}>
+          <span className="context-menu-icon">
+            <svg viewBox="0 0 16 16"><path d="M10.478 1.647a.5.5 0 1 0-.956-.294l-4 13a.5.5 0 0 0 .956.294l4-13zM4.854 4.146a.5.5 0 0 1 0 .708L1.707 8l3.147 3.146a.5.5 0 0 1-.708.708l-3.5-3.5a.5.5 0 0 1 0-.708l3.5-3.5a.5.5 0 0 1 .708 0zm6.292 0a.5.5 0 0 0 0 .708L14.293 8l-3.147 3.146a.5.5 0 0 0 .708.708l3.5-3.5a.5.5 0 0 0 0-.708l-3.5-3.5a.5.5 0 0 0-.708 0z"/></svg>
+          </span>
+          Copy as \input{'{'}...{'}'}
+        </div>
+      )}
+      <div className="context-menu-separator" />
+      {isTeX && (
+        <div className="context-menu-item" onClick={() => { onFindReferences(file); onClose() }}>
+          <span className="context-menu-icon">
+            <svg viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/></svg>
+          </span>
+          Find References
+        </div>
+      )}
+    </div>
+  )
+}
+
+
 function FileTreeNode({
   node,
   depth,
   selectedFile,
   expandedFolders,
   onFileClick,
-  onToggleFolder
+  onToggleFolder,
+  onContextMenu
 }: {
   node: TreeNode
   depth: number
@@ -756,6 +866,7 @@ function FileTreeNode({
   expandedFolders: Set<string>
   onFileClick: (file: FileEntry) => void
   onToggleFolder: (path: string) => void
+  onContextMenu: (e: React.MouseEvent, file: FileEntry) => void
 }) {
   const isExpanded = expandedFolders.has(node.path)
   const isSelected = !node.isFolder && selectedFile?.name === node.file?.name
@@ -774,6 +885,12 @@ function FileTreeNode({
         className={`tree-item ${isSelected ? 'active' : ''}`}
         style={{ paddingLeft: `${12 + depth * 16}px` }}
         onClick={handleClick}
+        onContextMenu={(e) => {
+          if (!node.isFolder && node.file) {
+            e.preventDefault()
+            onContextMenu(e, node.file)
+          }
+        }}
       >
         {node.isFolder ? (
           <span className="tree-chevron">
@@ -808,6 +925,7 @@ function FileTreeNode({
           expandedFolders={expandedFolders}
           onFileClick={onFileClick}
           onToggleFolder={onToggleFolder}
+          onContextMenu={onContextMenu}
         />
       ))}
     </>
@@ -932,6 +1050,7 @@ export default function Viewer() {
   const [activeView, setActiveView] = useState<'explorer' | 'outline'>('explorer')
   const [outline, setOutline] = useState<SectionInfo[]>([])
   const [fontSize, setFontSize] = useState(14)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; file: FileEntry } | null>(null)
   const editorRef = useRef<any>(null)
 
   const fileTree = buildFileTree(files)
@@ -1072,6 +1191,54 @@ export default function Viewer() {
       }
     }, { passive: false })
   }
+
+  // Context menu handlers
+  const handleDownload = useCallback((file: FileEntry) => {
+    let content: Blob
+    let filename = file.name.split('/').pop() || file.name
+    
+    if (file.isBinary && file.binaryData) {
+      content = new Blob([new Uint8Array(file.binaryData)], { type: file.mimeType || 'application/octet-stream' })
+    } else {
+      content = new Blob([file.content], { type: 'text/plain' })
+    }
+    
+    const url = URL.createObjectURL(content)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }, [])
+
+  const handleCopyPath = useCallback((file: FileEntry) => {
+    navigator.clipboard.writeText(file.name)
+  }, [])
+
+  const handleCopyContent = useCallback((file: FileEntry) => {
+    if (!file.isBinary) {
+      navigator.clipboard.writeText(file.content)
+    }
+  }, [])
+
+  const handleCopyAsLatex = useCallback((file: FileEntry) => {
+    const basename = file.name.replace(/\.tex$/, '').split('/').pop()
+    navigator.clipboard.writeText(`\\input{${basename}}`)
+  }, [])
+
+  const handleFindReferences = useCallback((file: FileEntry) => {
+    // Switch to search mode and pre-fill with the filename pattern
+    const basename = file.name.replace(/\.tex$/, '').split('/').pop()
+    setShowSearch(true)
+    // We could set a search query here if SearchPanel supported it
+    // For now, just open search - user sees the feature
+  }, [])
+
+  const handleOpenInNewTab = useCallback((file: FileEntry) => {
+    handleFileClick(file)
+  }, [handleFileClick])
 
   if (loading) {
     return (
@@ -1234,6 +1401,7 @@ export default function Viewer() {
                 expandedFolders={expandedFolders}
                 onFileClick={handleFileClick}
                 onToggleFolder={handleToggleFolder}
+                onContextMenu={(e, file) => setContextMenu({ x: e.clientX, y: e.clientY, file })}
               />
             ))}
           </div>
@@ -1332,6 +1500,22 @@ export default function Viewer() {
           </div>
         </div>
       </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          file={contextMenu.file}
+          onClose={() => setContextMenu(null)}
+          onDownload={handleDownload}
+          onCopyPath={handleCopyPath}
+          onCopyContent={handleCopyContent}
+          onCopyAsLatex={handleCopyAsLatex}
+          onFindReferences={handleFindReferences}
+          onOpenInNewTab={handleOpenInNewTab}
+        />
+      )}
     </div>
   )
 }
