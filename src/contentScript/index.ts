@@ -17,47 +17,35 @@ function getPaperTitle(): string {
 }
 
 function createViewerButton(arxivId: string): HTMLElement {
-  const button = document.createElement('a')
-  button.className = 'abs-button download-eprint arxiv-texplorer-btn'
-  button.style.cssText = `
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white !important;
-    border: none;
-    font-weight: 500;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    transition: all 0.2s ease;
-  `
-  button.innerHTML = `
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-      <polyline points="14 2 14 8 20 8"/>
-      <line x1="16" y1="13" x2="8" y2="13"/>
-      <line x1="16" y1="17" x2="8" y2="17"/>
-      <polyline points="10 9 9 9 8 9"/>
-    </svg>
-    View TeX Source
-  `
+  const link = document.createElement('a')
+  link.className = 'abs-button download-eprint arxiv-texplorer-btn'
+  link.textContent = 'View TeX Source'
+  link.target = '_blank'
+  link.rel = 'noopener noreferrer'
 
-  button.addEventListener('mouseenter', () => {
-    button.style.transform = 'translateY(-1px)'
-    button.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.4)'
-  })
+  const title = encodeURIComponent(getPaperTitle())
+  link.href = chrome.runtime.getURL(`viewer.html?id=${arxivId}&title=${title}`)
 
-  button.addEventListener('mouseleave', () => {
-    button.style.transform = 'translateY(0)'
-    button.style.boxShadow = 'none'
-  })
+  return link
+}
 
-  button.addEventListener('click', (e) => {
+function createDownloadPdfLink(arxivId: string): HTMLElement {
+  const link = document.createElement('a')
+  link.className = 'abs-button download-pdf arxiv-texplorer-download-pdf'
+  link.textContent = 'Download PDF'
+  link.href = `https://arxiv.org/pdf/${arxivId}.pdf`
+
+  link.addEventListener('click', (e) => {
     e.preventDefault()
-    const title = encodeURIComponent(getPaperTitle())
-    const viewerUrl = chrome.runtime.getURL(`viewer.html?id=${arxivId}&title=${title}`)
-    window.open(viewerUrl, '_blank')
+    chrome.runtime.sendMessage({
+      type: 'arxiv-texplorer:download-pdf',
+      arxivId,
+      url: link.href,
+      title: getPaperTitle(),
+    })
   })
 
-  return button
+  return link
 }
 
 function injectButton(): void {
@@ -68,7 +56,9 @@ function injectButton(): void {
   }
 
   // Check if button already exists
-  if (document.querySelector('.arxiv-texplorer-btn')) {
+  const hasViewSource = Boolean(document.querySelector('.arxiv-texplorer-btn'))
+  const hasDownloadPdf = Boolean(document.querySelector('.arxiv-texplorer-download-pdf'))
+  if (hasViewSource && hasDownloadPdf) {
     return
   }
 
@@ -76,23 +66,45 @@ function injectButton(): void {
   const texSourceLink = document.querySelector('a.download-eprint[href*="/src/"]')
 
   if (texSourceLink && texSourceLink.parentElement) {
-    const listItem = document.createElement('li')
-    const button = createViewerButton(arxivId)
-    listItem.appendChild(button)
+    const viewSourceItem = hasViewSource ? null : document.createElement('li')
+    if (viewSourceItem) {
+      viewSourceItem.appendChild(createViewerButton(arxivId))
+    }
+
+    const downloadPdfItem = hasDownloadPdf ? null : document.createElement('li')
+    if (downloadPdfItem) {
+      downloadPdfItem.appendChild(createDownloadPdfLink(arxivId))
+    }
 
     // Insert after the TeX Source link
     const parentLi = texSourceLink.closest('li')
     if (parentLi && parentLi.parentElement) {
-      parentLi.parentElement.insertBefore(listItem, parentLi.nextSibling)
+      let insertAfter: ChildNode | null = parentLi.nextSibling
+
+      if (viewSourceItem) {
+        parentLi.parentElement.insertBefore(viewSourceItem, insertAfter)
+        insertAfter = viewSourceItem.nextSibling
+      }
+
+      if (downloadPdfItem) {
+        parentLi.parentElement.insertBefore(downloadPdfItem, insertAfter)
+      }
     }
   } else {
     // Fallback: try to find the full-text section
     const fullTextSection = document.querySelector('.full-text ul')
     if (fullTextSection) {
-      const listItem = document.createElement('li')
-      const button = createViewerButton(arxivId)
-      listItem.appendChild(button)
-      fullTextSection.appendChild(listItem)
+      if (!hasViewSource) {
+        const viewSourceItem = document.createElement('li')
+        viewSourceItem.appendChild(createViewerButton(arxivId))
+        fullTextSection.appendChild(viewSourceItem)
+      }
+
+      if (!hasDownloadPdf) {
+        const downloadPdfItem = document.createElement('li')
+        downloadPdfItem.appendChild(createDownloadPdfLink(arxivId))
+        fullTextSection.appendChild(downloadPdfItem)
+      }
     }
   }
 

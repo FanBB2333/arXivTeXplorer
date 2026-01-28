@@ -42,6 +42,6 @@ export default defineManifest({
       matches: ['https://arxiv.org/*'],
     },
   ],
-  permissions: ['storage'],
+  permissions: ['storage', 'downloads'],
   host_permissions: ['https://arxiv.org/*', 'https://export.arxiv.org/*'],
 })
